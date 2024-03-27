@@ -5,10 +5,10 @@
 
 # Initializing variables
 SECONDS=0 # builtin bash timer
-ZIPNAME="ThunderBolt-r5x-$(date '+%Y%m%d-%H%M').zip"
+ZIPNAME="Madhav-r5x-$(date '+%Y%m%d-%H%M').zip"
 TC_DIR="$HOME/tc/xRageTC-clang"
 AK3_DIR="$HOME/android/AnyKernel3"
-DEFCONFIG="vendor/RMX1911_defconfig"
+DEFCONFIG="biofrost_defconfig"
 
 #Telegram Updatation
 send_telegram_message(){
