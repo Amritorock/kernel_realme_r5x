@@ -1,93 +1,69 @@
-#!/usr/bin/env bash
+#!/bin/bash
 #
-# Build Script for Biofrost Kramel
-# Copyright (C) 2022-2024 Mar Yvan D. (xevan)
+# Compile script for ThunderBolt kernel
+# Copyright (C) 2022-2023 Amritorock.
 
-# Dependency preparation
-make clean mrproper
-git clean -fdx
-git reset --hard
-rm -rf AnyKernel/{*.zip,*.img,Image.gz-dtb}
-git clone --depth=1 https://github.com/mcdofrenchfreis/AnyKernel3.git -b r5x AnyKernel
+SECONDS=0 # builtin bash timer
+ZIPNAME="ThunderBolt-r5x-$(date '+%Y%m%d-%H%M').zip"
+TC_DIR="$HOME/tc/xRageTC-clang"
+AK3_DIR="$HOME/android/AnyKernel3"
+DEFCONFIG="vendor/RMX1911_defconfig"
 
-# Main Variables
-DATE=$(TZ=Asia/Singapore date +"%a %b %d %r %Z %Y")
-BUILD_START=$(date +"%s")
-TCDIR=/home/biofrost/Development/Compiler/AndroidClang
-DTBO=$(pwd)/out/arch/arm64/boot/dtbo.img
-IMAGE=$(pwd)/out/arch/arm64/boot/Image.gz-dtb
+if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
+   head=$(git rev-parse --verify HEAD 2>/dev/null); then
+ ZIPNAME="${ZIPNAME::-4}-$(echo $head | cut -c1-8).zip"
+fi
 
-# Naming Variables
-MIN_HEAD=$(git rev-parse HEAD | cut -c 1-7)
-export ZIP_NAME="biofrost-R11.hakone-${MIN_HEAD}"
+export PATH="$TC_DIR/bin:$PATH"
 
-# GitHub Variables
-export COMMIT_HASH=$(git rev-parse --short HEAD)
-export BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
-export REPO_URL="https://github.com/mcdofrenchfreis/biofrost-kernel-realme-trinket"
+if ! [ -d "$TC_DIR" ]; then
+echo "xRageTC-clang not found! Cloning to $TC_DIR..."
+if ! git clone -q -b main --depth=1 https://github.com/xyz-prjkt/xRageTC-clang $TC_DIR; then
+echo "Cloning failed! Aborting..."
+exit 1
+fi
+fi
 
-# Build Information
-export COMPILER_NAME="$(${TCDIR}/bin/clang --version | head -n 1 | perl -pe 's/\(http.*?\)//gs' | sed -e 's/  */ /g' -e 's/[[:space:]]*$//')"
-export LINKER_NAME="$("${TCDIR}"/bin/ld.lld --version | head -n 1 | sed 's/(compatible with [^)]*)//' | head -n 1 | perl -pe 's/\(http.*?\)//gs' | sed -e 's/  */ /g' -e 's/[[:space:]]*$//')"
-export DEVICE="Realme 5 Series"
-export CODENAME="realme_trinket"
-export BUILD_TYPE="Stable"
-export DISTRO=$(source /etc/os-release && echo "${NAME}")
+export KBUILD_BUILD_USER=Amrito
+export KBUILD_BUILD_HOST=Stable_Builds
 
-# Telegram Integration Variables
-CI_ID="-1001736789494"
-BOT_ID="5129489057:AAF5o-JfQ1iAUp9Min7Jcr9sHPjTpCaIlA8"
+if [[ $1 = "-r" || $1 = "--regen" ]]; then
+make O=out ARCH=arm64 $DEFCONFIG savedefconfig
+cp out/defconfig arch/arm64/configs/$DEFCONFIG
+exit
+fi
 
-function sendinfo() {
-  kernel_version=$(make kernelversion 2>/dev/null)
-  commit_details=$(git log --pretty=format:'%s' -1)
-  message="<b>Laboratory Machine || CI Build Triggered</b>%0A<b>Docker: </b><code>${DISTRO}</code>%0A<b>Build Date: </b><code>${DATE}</code>%0A<b>Device: </b><code>${DEVICE} (${CODENAME})</code>%0A<b>Build Type: </b><code>${BUILD_TYPE}</code>%0A<b>Kernel Version: </b><code>${kernel_version}</code>%0A<b>Compiler: </b><code>${COMPILER_NAME}</code>%0A<b>Linker: </b><code>${LINKER_NAME}</code>%0A<b>Zip Name: </b><code>${ZIP_NAME}</code>%0A<b>Branch: </b><code>${BRANCH_NAME} (head)</code>%0A<b>Top Commit: </b><a href='${REPO_URL}/commit/${COMMIT_HASH}'>${COMMIT_HASH}</a>%0A<code>(${commit_details})</code>"
-  curl -s -X POST "https://api.telegram.org/bot${BOT_ID}/sendMessage" \
-    -d chat_id="$CI_ID" \
-    -d "disable_web_page_preview=true" \
-    -d "parse_mode=html" \
-    -d text="$message"
-}
-function push() {
-    ZIP=$(find AnyKernel -maxdepth 1 -name '*.zip' -type f -printf '%T@ %p\n' | sort -n | tail -1 | awk '{print $2}')
-    MD5CHECKSUM=$(md5sum "$ZIP" | cut -d' ' -f1)
-    curl -F document=@$ZIP "https://api.telegram.org/bot${BOT_ID}/sendDocument" \
-        -F chat_id="$CI_ID" \
-        -F "disable_web_page_preview=true" \
-        -F "parse_mode=html" \
-        -F caption="Build took $(($DIFF / 60)) minutes and $(($DIFF % 60)) seconds. | <b>Compiled with ${COMPILER_NAME}</b> | <b>MD5 Checksum: </b><code>${MD5CHECKSUM}</code>."
-}
-function finerr() {
-    curl -s -X POST "https://api.telegram.org/bot${BOT_ID}/sendMessage" \
-        -d chat_id="$CI_ID" \
-        -d "disable_web_page_preview=true" \
-        -d "parse_mode=html" \
-        -d text="Compilation failed, please check build logs for errors."
-    exit 1
-}
-function compile() {
-    make O=out ARCH=arm64 biofrost_defconfig
-    export PATH="${TCDIR}/bin:${PATH}"
-    export CROSS_COMPILE=aarch64-linux-gnu-
-    export CLANG_TRIPLE=aarch64-linux-gnu-
-    export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-    make -j$(nproc --all) O=out CC=clang AR=llvm-ar AS=llvm-as NM=llvm-nm OBJDUMP=llvm-objdump STRIP=llvm-strip \
+if [[ $1 = "-c" || $1 = "--clean" ]]; then
+rm -rf out
+fi
 
-    if ! [ -a "$IMAGE" ] || ! [ -a "$DTBO" ]; then
-        finerr
-    fi
-    cp out/arch/arm64/boot/Image.gz-dtb AnyKernel
-    cp out/arch/arm64/boot/dtbo.img AnyKernel
-}
-function zipping() {
-    cd AnyKernel || exit 1
-    zip -r9 "$ZIP_NAME".zip . -x ".git*" -x "README.md" -x "LICENSE" -x "*.zip"
-    cd ..
-}
+mkdir -p out
+make O=out ARCH=arm64 $DEFCONFIG
 
-sendinfo
-compile
-zipping
-BUILD_END=$(date +"%s")
-DIFF=$((BUILD_END - BUILD_START))
-push
+echo -e "\nStarting compilation...\n"
+make -j$(nproc --all) O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar AS=llvm-as NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- Image.gz-dtb dtbo.img
+
+if [ -f "out/arch/arm64/boot/Image.gz-dtb" ] && [ -f "out/arch/arm64/boot/dtbo.img" ]; then
+echo -e "\nKernel compiled succesfully! Zipping up...\n"
+if [ -d "$AK3_DIR" ]; then
+cp -r $AK3_DIR AnyKernel3
+elif ! git clone -q https://github.com/Amritorock/AnyKernel3; then
+echo -e "\nAnyKernel3 repo not found locally and cloning failed! Aborting..."
+exit 1
+fi
+cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3
+cp out/arch/arm64/boot/dtbo.img AnyKernel3
+rm -f *zip
+cd AnyKernel3
+git checkout master &> /dev/null
+zip -r9 "../$ZIPNAME" * -x '*.git*' README.md *placeholder
+cd ..
+rm -rf AnyKernel3
+rm -rf out/arch/arm64/boot
+echo -e "\nCompleted in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s) !"
+echo "Zip: $ZIPNAME"
+curl --upload-file $ZIPNAME https://temp.sh/$ZIPNAME; echo
+else
+echo -e "\nCompilation failed!"
+exit 1
+fi
