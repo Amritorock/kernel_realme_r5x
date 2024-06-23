@@ -6,7 +6,7 @@
 # Initializing variables
 SECONDS=0 # builtin bash timer
 ZIPNAME="ThunderBolt-r5x-$(date '+%Y%m%d-%H%M').zip"
-TC_DIR="$HOME/tc/xRageTC-clang"
+TC_DIR="$HOME/tc/playground-clang"
 AK3_DIR="$HOME/android/AnyKernel3"
 DEFCONFIG="vendor/RMX1911_defconfig"
 
@@ -25,8 +25,8 @@ fi
 export PATH="$TC_DIR/bin:$PATH"
 
 if ! [ -d "$TC_DIR" ]; then
-  echo "xRageTC-clang not found! Cloning to $TC_DIR..."
-if ! git clone -q -b main --depth=1 https://github.com/xyz-prjkt/xRageTC-clang $TC_DIR; then
+  echo "playground-clang not found! Cloning to $TC_DIR..."
+if ! git clone -q -b 17 --depth=1 https://gitlab.com/PixelOS-Devices/playgroundtc.git $TC_DIR; then
   echo "Cloning failed! Aborting..."
   exit 1
 fi
